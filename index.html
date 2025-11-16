@@ -1,0 +1,1208 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <link rel="manifest" href="manifest.json">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bảng Đen</title>
+    <!-- Tải Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tải Material Symbols cho icon mũi tên, undo/redo và các chức năng -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+
+    <!-- Cấu hình Font Google Sans theo yêu cầu của bro -->
+    <style>
+        @font-face {
+            font-family: 'Google Sans';
+            src: url('https://tuanphong3108.github.io/google-sans-do-not-access/GoogleSans-Regular.ttf') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+        }
+        @font-face {
+            font-family: 'Google Sans';
+            src: url('https://tuanphong3108.github.io/google-sans-do-not-access/GoogleSans-Bold.ttf') format('truetype');
+            font-weight: bold;
+            font-style: normal;
+        }
+        @font-face {
+            font-family: 'Google Sans';
+            src: url('https://tuanphong3108.github.io/google-sans-do-not-access/GoogleSans-Italic.ttf') format('truetype');
+            font-weight: normal;
+            font-style: italic;
+        }
+        
+        /* Bỏ Viền/Shadow khỏi Canvas và Container Video, đẩy lên Parent */
+        #drawingCanvas {
+            touch-action: none; 
+            cursor: crosshair;
+            display: block;
+            border-radius: 0.5rem; /* Giảm nhẹ để nằm gọn trong viền parent */
+        }
+        
+        /* Video Player Container */
+        #videoPlayerContainer {
+            width: 100%;
+            height: 100%;
+            position: absolute; /* FIX: Đã thêm absolute */
+            inset: 0; /* FIX: Đã thêm inset-0 */
+            border-radius: 0.5rem; /* Giảm nhẹ để nằm gọn trong viền parent */
+        }
+
+        /* Nút chung */
+        .chalk-button {
+            transition: all 0.1s ease-in-out;
+            font-weight: 600;
+            text-transform: uppercase; 
+            letter-spacing: 0.05em;
+            background-color: #3e2723; 
+            color: var(--tw-color);
+            border: 2px solid #5d4037;
+            box-shadow: 0 4px #5d4037;
+            display: flex; 
+            align-items: center;
+            gap: 4px;
+        }
+        .chalk-button:hover {
+            box-shadow: 0 2px #5d4037;
+            transform: translateY(2px);
+            background-color: #4a3128;
+        }
+        .chalk-button:active {
+            box-shadow: none;
+            transform: translateY(4px);
+        }
+        
+        .chalk-button.active {
+            box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.5); 
+            background-color: #5d4037;
+            transform: translateY(2px);
+        }
+
+        .chalk-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            box-shadow: 0 4px #5d4037; 
+            transform: translateY(0);
+        }
+        
+        /* Cấu hình Material Symbols */
+        .material-symbols-outlined {
+          font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+          transition: font-variation-settings 0.2s ease-in-out; 
+        }
+        
+        .chalk-button:hover .material-symbols-outlined,
+        .chalk-button.active .material-symbols-outlined {
+          font-variation-settings: 'FILL' 1, 'wght' 600, 'GRAD' 0, 'opsz' 24;
+        }
+        
+        #controlsContainer {
+            transition: transform 0.3s ease-in-out;
+        }
+
+        /* === CSS cho Modal và Animation === */
+        .modal-overlay {
+            transition: opacity 0.3s ease;
+        }
+        .modal-content {
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); 
+        }
+        .hidden-modal {
+            opacity: 0;
+            pointer-events: none; 
+        }
+        #settingsScreen {
+            transition: opacity 0.3s ease-in-out;
+        }
+
+    </style>
+    <!-- Cấu hình Tailwind cho font Google Sans -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Google Sans', 'sans-serif'],
+                    },
+                    colors: {
+                        'chalkboard': '#1d3a33', 
+                        'chalk-default': '#f2f2f2', 
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<!-- Áp dụng font Google Sans vào body -->
+<body class="bg-chalkboard min-h-screen flex flex-col items-center justify-center font-sans antialiased p-4">
+
+    <!-- Khung chứa nội dung chính (Bảng hoặc Video) -->
+    <!-- FIX: Loại bỏ flex-col và thay bằng relative để các phần tử absolute chồng lên nhau -->
+    <div id="mainContentContainer" class="w-full max-w-5xl relative aspect-[4/3] max-h-[85vh] rounded-xl border-[10px] border-[#3e2723] shadow-[0_10px_20px_rgba(0,0,0,0.5)] bg-transparent">
+        
+        <!-- Canvas - Bảng Đen -->
+        <!-- FIX: Đã thêm absolute inset-0 -->
+        <canvas id="drawingCanvas" class="w-full h-full absolute inset-0 bg-chalkboard rounded-lg"></canvas>
+
+        <!-- Video Player Container (MỚI) - Giờ đây chiếm trọn khung hình khi hiện lên -->
+        <!-- FIX: Đã thêm absolute inset-0 -->
+        <div id="videoPlayerContainer" class="hidden w-full h-full absolute inset-0 bg-black rounded-lg">
+            <!-- Nút Quay lại Bảng (Góc trên bên trái) - FIX: Đã chuyển từ right-3 sang left-3 -->
+            <button id="backFromVideoButton" class="chalk-button absolute top-3 left-3 py-2 px-4 rounded-lg text-blue-300 z-50" style="--tw-color: #93c5fd;">
+                <span class="material-symbols-outlined text-xl">arrow_back</span>
+                Quay lại Bảng
+            </button>
+            <!-- Iframe chứa ứng dụng ngoài -->
+            <iframe id="videoIframe" src="about:blank" class="w-full h-full rounded-lg" frameborder="0" allowfullscreen></iframe>
+        </div>
+
+        <!-- Nút "Xem Video" (Góc trên bên phải) - FIX: Đã chuyển từ left-3 sang right-3 -->
+        <button id="videoButton" class="chalk-button absolute top-3 right-3 py-2 px-4 rounded-lg text-red-300 z-50" style="--tw-color: #fca5a5;">
+            <span class="material-symbols-outlined text-xl">videocam</span>
+            Xem Video
+        </button>
+    </div>
+
+    <!-- Floating Toolbar Wrapper (Fixed, centered at bottom) -->
+    <div class="fixed inset-x-4 bottom-4 z-50 mx-auto max-w-xl">
+        
+        <!-- Toggle Button (Nút mũi tên - Luôn nằm trên cùng) -->
+        <button id="toolbarToggleButton" class="absolute left-1/2 transform -translate-x-1/2 p-3 rounded-t-xl bg-gray-700 text-chalk-default hover:bg-gray-600 transition duration-200 focus:outline-none cursor-pointer shadow-xl -bottom-1 z-20">
+            <span class="material-symbols-outlined text-2xl" id="toggleIcon">
+                keyboard_arrow_up 
+            </span>
+        </button>
+
+        <!-- Controls Container (Đây là khối trượt lên/xuống) -->
+        <div id="controlsContainer" class="w-full z-10"> 
+            
+            <!-- Vùng điều khiển thực tế -->
+            <div id="controls" class="flex flex-wrap justify-center items-center gap-3 md:gap-6 w-full p-4 bg-gray-700 rounded-xl shadow-2xl">
+                
+                <!-- Nút chuyển chế độ chính -->
+                <button id="chalkButton" class="chalk-button py-2 px-4 rounded-lg text-chalk-default active" style="--tw-color: #f2f2f2;">
+                    <span class="material-symbols-outlined text-xl">draw</span>
+                    Phấn
+                </button>
+
+                <button id="eraserButton" class="chalk-button py-2 px-4 rounded-lg text-yellow-300" style="--tw-color: #fcd34d;">
+                    <span class="material-symbols-outlined text-xl">ink_eraser</span>
+                    Tẩy
+                </button>
+
+                <!-- NÚT UNDO/REDO VÀ CÀI ĐẶT -->
+                <div class="flex items-center gap-2">
+                    <button id="undoButton" class="chalk-button py-2 px-3 rounded-lg text-blue-300 disabled:opacity-50" style="--tw-color: #93c5fd;" disabled>
+                        <span class="material-symbols-outlined text-xl">undo</span>
+                    </button>
+                    <button id="redoButton" class="chalk-button py-2 px-3 rounded-lg text-blue-300 disabled:opacity-50" style="--tw-color: #93c5fd;" disabled>
+                        <span class="material-symbols-outlined text-xl">redo</span>
+                    </button>
+                </div>
+
+                <!-- NÚT CÀI ĐẶT MỚI -->
+                <button id="settingsButton" class="chalk-button py-2 px-4 rounded-lg text-purple-300" style="--tw-color: #d8b4fe;">
+                    <span class="material-symbols-outlined text-xl">settings</span>
+                    Cài đặt
+                </button>
+                
+                <!-- Thanh trượt kích thước nét vẽ/tẩy (LUÔN HIỆN) -->
+                <div class="flex items-center gap-2">
+                    <!-- Label sẽ thay đổi: Cỡ Nét <-> Cỡ Tẩy -->
+                    <label for="sizeSlider" class="text-sm font-medium text-chalk-default whitespace-nowrap" id="sizeLabel">Cỡ Nét (<span id="currentSizeValue">5</span>)</label>
+                    <input type="range" id="sizeSlider" min="1" max="50" value="5" class="w-24 md:w-40 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer range-lg">
+                </div>
+
+                <!-- NÚT LƯU ẢNH (SHARE) -->
+                <button id="shareButton" class="chalk-button py-2 px-4 rounded-lg text-green-300" style="--tw-color: #a7f3d0;">
+                    <span class="material-symbols-outlined text-xl">download</span>
+                    Lưu ảnh
+                </button>
+
+
+                <!-- Vùng điều khiển vẽ (CHỈ CÒN COLOR PICKER) -->
+                <div id="drawingControls" class="items-center gap-3 md:gap-6 flex">
+                    <!-- Bộ chọn màu -->
+                    <label class="text-sm font-medium text-chalk-default flex items-center gap-2">
+                        <input type="color" id="colorPicker" value="#f2f2f2" class="w-10 h-10 border-2 border-chalk-default rounded-full cursor-pointer p-0 overflow-hidden bg-transparent">
+                        Màu
+                    </label>
+                </div>
+
+                <!-- Vùng điều khiển tẩy (CHỈ CÒN CLEAR ALL) -->
+                <div id="eraserControls" class="items-center gap-3 md:gap-6 hidden">
+                    <!-- Nút Xóa TẤT CẢ -->
+                    <button id="clearAllButton" class="chalk-button py-2 px-4 rounded-lg text-red-300" style="--tw-color: #fca5a5;">
+                        <span class="material-symbols-outlined text-xl">delete_forever</span>
+                        Xóa tất cả
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+    
+    <!-- Confirmation Dialog (Modal) - Xóa hết -->
+    <div id="confirmationModal" class="hidden-modal fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <!-- Overlay (Khung nền mờ) -->
+        <div id="modalOverlay" class="modal-overlay absolute inset-0 bg-black/75"></div>
+
+        <!-- Dialog Content (Nội dung hộp thoại) -->
+        <div id="modalContent" class="modal-content transform scale-95 opacity-0 bg-gray-800 text-chalk-default rounded-xl shadow-2xl p-6 z-20 w-full max-w-sm">
+            <h3 class="text-xl font-bold mb-3 text-red-400 flex items-center">
+                <span class="material-symbols-outlined mr-2">warning</span>
+                Xác Nhận Xóa
+            </h3>
+            <p class="mb-6">Phong có chắc chắn muốn <span class="font-bold">XÓA TẤT CẢ</span> các nét vẽ trên bảng đen không? Hành động này không thể hoàn tác.</p>
+            <div class="flex justify-end gap-3">
+                <button id="cancelClearButton" class="chalk-button py-2 px-4 rounded-lg text-gray-400 bg-gray-700 hover:bg-gray-600 transition duration-150" style="--tw-color: #9ca3af;">
+                    Hủy
+                </button>
+                <button id="confirmClearButton" class="chalk-button py-2 px-4 rounded-lg text-red-300" style="--tw-color: #fca5a5;">
+                    Xóa hết
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Video Confirmation Modal (MỚI) -->
+    <div id="videoModal" class="hidden-modal fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <!-- Overlay -->
+        <div class="modal-overlay absolute inset-0 bg-black/75"></div>
+
+        <!-- Dialog Content -->
+        <div id="videoModalContent" class="modal-content transform scale-95 opacity-0 bg-gray-800 text-chalk-default rounded-xl shadow-2xl p-6 z-20 w-full max-w-lg">
+            <h3 class="text-xl font-bold mb-3 text-yellow-400 flex items-center">
+                <span class="material-symbols-outlined mr-2">info</span>
+                LƯU Ý QUAN TRỌNG
+            </h3>
+            <p class="mb-6 text-base leading-relaxed">
+                Khi bạn sử dụng tính năng này, mọi thay đổi trên bảng sẽ bị <span class="font-bold text-red-300">xóa sạch</span>. Tính năng này liên kết với một ứng dụng bên ngoài, không liên quan <span class="italic text-gray-400">(thực chất là có)</span> tới ứng dụng này.
+            </p>
+            <div class="flex justify-end gap-3">
+                <button id="cancelVideoButton" class="chalk-button py-2 px-4 rounded-lg text-gray-400 bg-gray-700 hover:bg-gray-600 transition duration-150" style="--tw-color: #9ca3af;">
+                    Hủy
+                </button>
+                <button id="confirmVideoButton" class="chalk-button py-2 px-4 rounded-lg text-green-300" style="--tw-color: #a7f3d0;">
+                    Tiếp tục xem
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Settings Screen (Full-Screen) MỚI -->
+    <div id="settingsScreen" class="hidden-modal fixed inset-0 z-[100] bg-gray-900 text-chalk-default">
+        <!-- Header với Nút Quay lại -->
+        <div class="fixed top-0 left-0 right-0 p-4 bg-gray-800 shadow-xl z-50">
+            <button id="backButton" class="chalk-button py-2 px-4 rounded-lg text-blue-300" style="--tw-color: #93c5fd;">
+                <span class="material-symbols-outlined text-xl">arrow_back</span>
+                Quay lại
+            </button>
+        </div>
+
+        <!-- Settings Content -->
+        <div id="settingsContent" class="flex flex-col items-center justify-start pt-24 pb-4 w-full h-full overflow-y-auto">
+            <div class="w-full max-w-lg bg-gray-800 rounded-xl shadow-2xl p-8">
+                <h3 class="text-3xl font-bold mb-8 text-purple-400 flex items-center justify-center">
+                    <span class="material-symbols-outlined mr-2 text-4xl">tune</span>
+                    Cài Đặt Bảng
+                </h3>
+                
+                <!-- Setting: Màu Bảng -->
+                <div class="flex flex-col gap-2 py-3 border-b border-gray-700">
+                    <p class="text-xl font-medium text-chalk-default">Màu Bảng</p>
+                    <label for="boardColorPicker" class="text-sm text-gray-400 mb-2">
+                        Lưu ý: Thay đổi màu bảng sẽ <span class="font-bold">xóa toàn bộ</span> các nét vẽ hiện tại.
+                    </label>
+                    <input type="color" id="boardColorPicker" value="#1d3a33" class="w-full h-12 border-2 border-gray-400 rounded-lg cursor-pointer p-0 overflow-hidden bg-transparent">
+                </div>
+                
+                <!-- Setting: Bảo vệ Bảng MỚI -->
+                <div class="flex flex-col gap-2 py-3 border-b border-gray-700" id="protectionSetting">
+                    <p class="text-xl font-medium text-chalk-default flex justify-between items-center">
+                        Bảo vệ Bảng
+                        <button id="toggleProtectionButton" class="chalk-button py-1 px-3 rounded-lg text-green-300" style="--tw-color: #a7f3d0;">
+                            <span id="protectionStatusIcon" class="material-symbols-outlined text-base">lock_open</span>
+                            <span id="protectionStatusText">Tắt</span>
+                        </button>
+                    </p>
+                    <p class="text-sm text-gray-400">Yêu cầu mật khẩu mỗi khi mở ứng dụng.</p>
+                </div>
+
+                <p class="mt-8 text-sm text-gray-500 text-center">Version 1.3 | Developed by Phong's AI Bro</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Password Modal (Set or Unlock) MỚI -->
+    <div id="passwordModal" class="hidden-modal fixed inset-0 z-[110] flex items-center justify-center p-4">
+        <!-- Overlay (Khung nền mờ) -->
+        <div id="passwordModalOverlay" class="modal-overlay absolute inset-0 bg-black/85"></div>
+
+        <!-- Dialog Content -->
+        <div id="passwordModalContent" class="modal-content transform scale-95 opacity-0 bg-gray-800 text-chalk-default rounded-xl shadow-2xl p-6 z-20 w-full max-w-sm">
+            <h3 class="text-xl font-bold mb-4 text-yellow-400 flex items-center" id="passwordModalTitle">
+                <span class="material-symbols-outlined mr-2">key</span>
+                Đặt Mật Khẩu
+            </h3>
+            <p class="mb-4 text-sm text-gray-300" id="passwordModalSubtitle">Nhập mật khẩu bạn muốn sử dụng để bảo vệ bảng.</p>
+            
+            <input type="password" id="passwordInput" placeholder="Nhập mật khẩu..." class="w-full p-3 mb-4 rounded-lg bg-gray-700 border border-gray-600 text-chalk-default focus:outline-none focus:border-purple-400" onkeydown="if(event.key === 'Enter') document.getElementById('confirmPasswordButton').click();">
+            
+            <p class="text-red-400 mb-4 hidden" id="passwordError">Mật khẩu không đúng. Vui lòng thử lại.</p>
+
+            <div class="flex justify-end gap-3">
+                <button id="cancelPasswordButton" class="chalk-button py-2 px-4 rounded-lg text-gray-400 bg-gray-700 hover:bg-gray-600 transition duration-150" style="--tw-color: #9ca3af;">
+                    Hủy
+                </button>
+                <button id="confirmPasswordButton" class="chalk-button py-2 px-4 rounded-lg text-purple-300" style="--tw-color: #d8b4fe;">
+                    Xác Nhận
+                </button>
+                <button id="disableProtectionButton" class="chalk-button py-2 px-4 rounded-lg text-red-300 hidden" style="--tw-color: #fca5a5;">
+                    Tắt Bảo vệ
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+    <script type="module">
+        // Import các module Firebase cần thiết (giữ lại theo quy tắc, dù không dùng)
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // =======================================================
+        // KHỐI KHỞI TẠO FIREBASE VÀ XÁC THỰC (MANDATORY SETUP)
+        // =======================================================
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { projectId: "demo-project" };
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        let app, db, auth;
+        let userId = null;
+
+        async function initializeFirebase() {
+            try {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                    } else {
+                        userId = crypto.randomUUID();
+                    }
+                });
+
+            } catch (error) {
+                console.error("Lỗi khởi tạo Firebase hoặc xác thực:", error);
+            }
+        }
+        
+        initializeFirebase();
+        // =======================================================
+        // KẾT THÚC KHỐI KHỞI TẠO FIREBASE
+        // =======================================================
+
+
+        // =======================================================
+        // LOGIC THANH CÔNG CỤ NỔI (FLOATING TOOLBAR)
+        // =======================================================
+        const controlsContainer = document.getElementById('controlsContainer');
+        const toolbarToggleButton = document.getElementById('toolbarToggleButton');
+        const toggleIcon = document.getElementById('toggleIcon');
+        
+        let isToolbarVisible = false; 
+
+        // Khởi tạo trạng thái ẩn khi load
+        controlsContainer.style.transform = 'translateY(100%)'; 
+        
+        function toggleToolbar(isVisible) {
+            isToolbarVisible = isVisible;
+            if (isVisible) {
+                controlsContainer.style.transform = 'translateY(-48px)'; 
+                toggleIcon.textContent = 'keyboard_arrow_down'; 
+            } else {
+                controlsContainer.style.transform = 'translateY(100%)'; 
+                toggleIcon.textContent = 'keyboard_arrow_up'; 
+            }
+        }
+        
+        toolbarToggleButton.addEventListener('click', () => {
+            toggleToolbar(!isToolbarVisible); 
+        });
+
+        // =======================================================
+        // LOGIC ỨNG DỤNG CANVAS - BLACK BOARD
+        // =======================================================
+        const canvas = document.getElementById('drawingCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Các Controls
+        const chalkButton = document.getElementById('chalkButton');
+        const eraserButton = document.getElementById('eraserButton');
+        const clearAllButton = document.getElementById('clearAllButton');
+        const colorPicker = document.getElementById('colorPicker');
+        const sizeSlider = document.getElementById('sizeSlider');
+        
+        // ID mới cho label size
+        const sizeLabel = document.getElementById('sizeLabel');
+        const currentSizeValueSpan = document.getElementById('currentSizeValue'); 
+
+        const drawingControls = document.getElementById('drawingControls');
+        const eraserControls = document.getElementById('eraserControls');
+        const undoButton = document.getElementById('undoButton');
+        const redoButton = document.getElementById('redoButton');
+        const shareButton = document.getElementById('shareButton');
+        const settingsButton = document.getElementById('settingsButton');
+        
+        // Controls cho Modal Xóa
+        const confirmationModal = document.getElementById('confirmationModal');
+        const modalContent = document.getElementById('modalContent');
+        const confirmClearButton = document.getElementById('confirmClearButton');
+        const cancelClearButton = document.getElementById('cancelClearButton');
+
+        // Controls cho Settings Screen 
+        const settingsScreen = document.getElementById('settingsScreen'); 
+        const backButton = document.getElementById('backButton'); 
+        const boardColorPicker = document.getElementById('boardColorPicker');
+
+        // Controls cho Video Player (MỚI)
+        const videoButton = document.getElementById('videoButton');
+        const videoModal = document.getElementById('videoModal');
+        const videoModalContent = document.getElementById('videoModalContent');
+        const confirmVideoButton = document.getElementById('confirmVideoButton');
+        const cancelVideoButton = document.getElementById('cancelVideoButton');
+        const videoPlayerContainer = document.getElementById('videoPlayerContainer');
+        const videoIframe = document.getElementById('videoIframe');
+        const backFromVideoButton = document.getElementById('backFromVideoButton');
+        
+        // Controls cho Bảo vệ Bảng MỚI
+        const PASSWORD_KEY = 'blackboard_password'; 
+        let isBoardLocked = false; 
+        const toggleProtectionButton = document.getElementById('toggleProtectionButton');
+        const protectionStatusText = document.getElementById('protectionStatusText');
+        const protectionStatusIcon = document.getElementById('protectionStatusIcon');
+        const passwordModal = document.getElementById('passwordModal');
+        const passwordModalContent = document.getElementById('passwordModalContent');
+        const passwordModalTitle = document.getElementById('passwordModalTitle');
+        const passwordModalSubtitle = document.getElementById('passwordModalSubtitle');
+        const passwordInput = document.getElementById('passwordInput');
+        const passwordError = document.getElementById('passwordError');
+        const confirmPasswordButton = document.getElementById('confirmPasswordButton');
+        const cancelPasswordButtonElement = document.getElementById('cancelPasswordButton');
+        const disableProtectionButton = document.getElementById('disableProtectionButton');
+
+
+        // TRẠNG THÁI VẼ
+        let isDrawing = false;
+        let lastX = 0;
+        let lastY = 0;
+        let currentDrawColor = colorPicker.value;
+        let isErasing = false; 
+
+        // TRẠNG THÁI LỊCH SỬ (HISTORY)
+        const HISTORY_LIMIT = 30; // Giới hạn 30 bước Undo
+        let history = []; 
+        let historyIndex = -1; // -1: chưa có state nào được lưu
+
+        // Màu nền bảng đen: CHUYỂN THÀNH LET
+        const BOARD_COLOR_KEY = 'boardColor'; // KEY LƯU MÀU BẢNG
+        let CHALKBOARD_COLOR = '#1d3a33';
+
+        // === LOGIC MODAL VÀ ANIMATION ===
+
+        function showModal(modalElement, contentElement) {
+            modalElement.classList.remove('hidden-modal');
+            modalElement.style.opacity = 0;
+            contentElement.style.opacity = 0;
+            contentElement.style.transform = 'scale(0.95)';
+
+            requestAnimationFrame(() => {
+                modalElement.style.opacity = 1;
+                contentElement.style.opacity = 1;
+                contentElement.style.transform = 'scale(1)';
+            });
+        }
+
+        function hideModal(modalElement, contentElement) {
+            modalElement.style.opacity = 0;
+            contentElement.style.opacity = 0;
+            contentElement.style.transform = 'scale(0.95)';
+            
+            setTimeout(() => {
+                modalElement.classList.add('hidden-modal');
+            }, 300); 
+        }
+
+        function showConfirmationModal() {
+            showModal(confirmationModal, modalContent);
+        }
+
+        function hideConfirmationModal() {
+            hideModal(confirmationModal, modalContent);
+        }
+        
+        function showVideoModal() {
+            // Tắt Toolbar trước khi hiện Modal
+            toggleToolbar(false);
+            showModal(videoModal, videoModalContent);
+        }
+
+
+        function showSettingsScreen() {
+            // 1. Đồng bộ giá trị màu hiện tại cho picker và UI Bảo vệ
+            boardColorPicker.value = CHALKBOARD_COLOR;
+            updateProtectionUI(!!localStorage.getItem(PASSWORD_KEY)); // Cập nhật UI nút Bảo vệ
+            
+            // 2. Ẩn Toolbar và Toggle Button, Video Button
+            controlsContainer.style.transform = 'translateY(100%)'; 
+            toolbarToggleButton.classList.add('hidden');
+            videoButton.classList.add('hidden'); // Ẩn nút Xem Video
+
+            // 3. Hiển thị Settings Screen với animation
+            settingsScreen.classList.remove('hidden-modal');
+            settingsScreen.style.opacity = 0;
+
+            requestAnimationFrame(() => {
+                settingsScreen.style.opacity = 1;
+            });
+        }
+
+        function hideSettingsScreen() {
+            // 1. Ẩn Settings Screen
+            settingsScreen.style.opacity = 0;
+            
+            setTimeout(() => {
+                settingsScreen.classList.add('hidden-modal');
+                
+                // 2. Hiển thị lại Toolbar, Toggle Button và Video Button (Khôi phục trạng thái ban đầu)
+                toolbarToggleButton.classList.remove('hidden');
+                videoButton.classList.remove('hidden');
+                toggleToolbar(isToolbarVisible); 
+            }, 300); 
+        }
+        
+        settingsButton.addEventListener('click', showSettingsScreen);
+        backButton.addEventListener('click', hideSettingsScreen); 
+        
+        // === LOGIC BẢO VỆ BẢNG MỚI ===
+
+        /**
+         * Điều khiển trạng thái khóa tương tác vẽ/thanh công cụ.
+         * @param {boolean} lock - True để khóa, False để mở khóa.
+         */
+        function lockDrawingInteractions(lock) {
+            isBoardLocked = lock;
+            // Ngăn chặn tương tác với canvas và toolbar
+            canvas.style.pointerEvents = lock ? 'none' : 'auto';
+            controlsContainer.style.pointerEvents = lock ? 'none' : 'auto';
+            toolbarToggleButton.style.pointerEvents = lock ? 'none' : 'auto';
+            
+            // Vô hiệu hóa nút
+            chalkButton.disabled = lock;
+            eraserButton.disabled = lock;
+            clearAllButton.disabled = lock;
+            shareButton.disabled = lock;
+            settingsButton.disabled = lock; 
+            videoButton.disabled = lock; // Khóa nút video
+
+            if (lock) {
+                undoButton.disabled = true;
+                redoButton.disabled = true;
+            } else {
+                updateHistoryButtons(); // Cập nhật undo/redo theo lịch sử
+            }
+        }
+        
+        /**
+         * Cập nhật UI của nút Bảo vệ Bảng trong Settings.
+         * @param {boolean} isProtected - True nếu có mật khẩu, False nếu không.
+         */
+        function updateProtectionUI(isProtected) {
+            if (isProtected) {
+                protectionStatusText.textContent = 'Bật';
+                protectionStatusIcon.textContent = 'lock';
+                // Đổi màu nút sang Xanh lá (Bật)
+                toggleProtectionButton.style.setProperty('--tw-color', '#a7f3d0');
+                toggleProtectionButton.classList.add('active');
+            } else {
+                protectionStatusText.textContent = 'Tắt';
+                protectionStatusIcon.textContent = 'lock_open';
+                // Đổi màu nút sang Xanh dương (Tắt)
+                toggleProtectionButton.style.setProperty('--tw-color', '#93c5fd');
+                toggleProtectionButton.classList.remove('active');
+            }
+        }
+
+        /**
+         * Hiển thị modal mật khẩu với các chế độ khác nhau.
+         * @param {'set' | 'unlock' | 'disable'} mode - Chế độ hoạt động.
+         */
+        function showPasswordModal(mode) {
+            passwordInput.value = '';
+            passwordError.classList.add('hidden');
+            
+            // Đặt lại các nút mặc định
+            confirmPasswordButton.classList.remove('hidden');
+            disableProtectionButton.classList.add('hidden');
+            cancelPasswordButtonElement.style.display = 'inline-flex';
+
+            if (mode === 'set') {
+                passwordModalTitle.textContent = 'Đặt Mật Khẩu Mới';
+                passwordModalSubtitle.textContent = 'Nhập mật khẩu bạn muốn sử dụng để bật bảo vệ bảng (Lưu ý: pass được lưu cục bộ).';
+                cancelPasswordButtonElement.textContent = 'Hủy';
+                confirmPasswordButton.onclick = handleSetPassword;
+            } else if (mode === 'unlock') {
+                passwordModalTitle.textContent = 'Bảng Đang Bị Khóa';
+                passwordModalSubtitle.textContent = 'Vui lòng nhập mật khẩu để mở khóa bảng và tiếp tục vẽ.';
+                cancelPasswordButtonElement.textContent = 'Để sau'; // Không cho phép đóng modal khi app load
+                cancelPasswordButtonElement.style.display = 'none'; // Ẩn nút Hủy để buộc nhập pass
+                confirmPasswordButton.onclick = handleUnlockBoard;
+                lockDrawingInteractions(true); // Đảm bảo khóa tương tác
+            } else if (mode === 'disable') {
+                passwordModalTitle.textContent = 'Tắt Bảo Vệ Bảng';
+                passwordModalSubtitle.textContent = 'Nhập mật khẩu hiện tại để tắt chức năng bảo vệ.';
+                confirmPasswordButton.classList.add('hidden');
+                disableProtectionButton.classList.remove('hidden');
+                disableProtectionButton.onclick = handleDisableProtection;
+                cancelPasswordButtonElement.textContent = 'Hủy';
+            }
+            
+            showModal(passwordModal, passwordModalContent);
+            passwordInput.focus();
+        }
+
+        function hidePasswordModal() {
+            hideModal(passwordModal, passwordModalContent);
+            passwordInput.value = '';
+            passwordError.classList.add('hidden');
+            // Mở khóa tương tác nếu bảng không bị khóa do mật khẩu (chỉ mở khóa sau khi hoàn thành Set/Disable)
+            if (!localStorage.getItem(PASSWORD_KEY)) {
+                 lockDrawingInteractions(false);
+            }
+        }
+
+        // Xử lý khi nhấn nút Bật/Tắt bảo vệ
+        toggleProtectionButton.addEventListener('click', () => {
+            hideSettingsScreen(); // Tạm thời ẩn màn hình cài đặt
+            const isProtected = localStorage.getItem(PASSWORD_KEY);
+            if (isProtected) {
+                showPasswordModal('disable');
+            } else {
+                showPasswordModal('set');
+            }
+        });
+        
+        cancelPasswordButtonElement.addEventListener('click', hidePasswordModal); 
+        // Bắt sự kiện Enter trên input pass
+        passwordInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault(); 
+                if (!confirmPasswordButton.classList.contains('hidden')) {
+                    confirmPasswordButton.click();
+                } else if (!disableProtectionButton.classList.contains('hidden')) {
+                    disableProtectionButton.click();
+                }
+            }
+        });
+
+
+        function handleSetPassword() {
+            const password = passwordInput.value.trim();
+            if (password.length > 0) {
+                // LƯU Ý: Đây là lưu bằng localStorage theo yêu cầu của Phong.
+                localStorage.setItem(PASSWORD_KEY, password);
+                updateProtectionUI(true);
+                hidePasswordModal();
+            } else {
+                passwordError.textContent = 'Mật khẩu không được để trống.';
+                passwordError.classList.remove('hidden');
+            }
+        }
+
+        function handleUnlockBoard() {
+            const savedPassword = localStorage.getItem(PASSWORD_KEY);
+            const enteredPassword = passwordInput.value.trim();
+            
+            if (enteredPassword === savedPassword) {
+                lockDrawingInteractions(false);
+                hidePasswordModal();
+            } else {
+                passwordError.textContent = 'Mật khẩu không đúng. Vui lòng thử lại.';
+                passwordError.classList.remove('hidden');
+            }
+        }
+
+        function handleDisableProtection() {
+            const savedPassword = localStorage.getItem(PASSWORD_KEY);
+            const enteredPassword = passwordInput.value.trim();
+            
+            if (enteredPassword === savedPassword) {
+                localStorage.removeItem(PASSWORD_KEY);
+                updateProtectionUI(false);
+                hidePasswordModal();
+                lockDrawingInteractions(false);
+            } else {
+                passwordError.textContent = 'Mật khẩu không đúng. Vui lòng thử lại.';
+                passwordError.classList.remove('hidden');
+            }
+        }
+
+        /**
+         * Kiểm tra mật khẩu khi ứng dụng khởi động.
+         */
+        function handleAppLock() {
+            const savedPassword = localStorage.getItem(PASSWORD_KEY);
+            if (savedPassword) {
+                updateProtectionUI(true);
+                // Khóa tương tác ngay lập tức
+                lockDrawingInteractions(true); 
+                // Yêu cầu nhập mật khẩu
+                showPasswordModal('unlock');
+            } else {
+                updateDrawingInteractions(false); // Cần có hàm này để update đúng
+            }
+        }
+
+        /**
+         * Hàm thay thế cho lockDrawingInteractions(false) khi mở app.
+         * Nó đảm bảo update đúng trạng thái nút sau khi mở khóa.
+         */
+        function updateDrawingInteractions(lock) {
+            isBoardLocked = lock;
+            canvas.style.pointerEvents = lock ? 'none' : 'auto';
+            controlsContainer.style.pointerEvents = lock ? 'none' : 'auto';
+            toolbarToggleButton.style.pointerEvents = lock ? 'none' : 'auto';
+            
+            chalkButton.disabled = lock;
+            eraserButton.disabled = lock;
+            clearAllButton.disabled = lock;
+            shareButton.disabled = lock;
+            settingsButton.disabled = lock; 
+            videoButton.disabled = lock; 
+
+            if (!lock) {
+                updateHistoryButtons(); // Cập nhật undo/redo theo lịch sử
+            }
+        }
+
+        // === LOGIC HISTORY ===
+
+        // Cập nhật trạng thái nút Undo/Redo
+        function updateHistoryButtons() {
+            undoButton.disabled = historyIndex <= 0;
+            redoButton.disabled = historyIndex >= history.length - 1;
+        }
+
+        // Lưu trạng thái canvas hiện tại
+        function saveState() {
+            if (historyIndex < history.length - 1) {
+                history = history.slice(0, historyIndex + 1);
+            }
+            
+            const dataURL = canvas.toDataURL();
+            
+            if (history.length === 0 || history[history.length - 1] !== dataURL) {
+                 history.push(dataURL);
+            }
+
+            if (history.length > HISTORY_LIMIT) {
+                history.shift();
+            } else {
+                historyIndex++;
+            }
+            
+            updateHistoryButtons();
+        }
+
+        // Vẽ lại canvas từ một state trong lịch sử
+        function restoreState(index) {
+            if (index < 0 || index >= history.length) return;
+
+            const img = new Image();
+            img.onload = () => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = CHALKBOARD_COLOR; 
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            };
+            img.src = history[index];
+            historyIndex = index;
+            updateHistoryButtons();
+        }
+        
+        function undoAction() {
+            if (historyIndex > 0) {
+                restoreState(historyIndex - 1);
+            }
+        }
+        
+        function redoAction() {
+            if (historyIndex < history.length - 1) {
+                restoreState(historyIndex + 1);
+            }
+        }
+        
+        undoButton.addEventListener('click', undoAction);
+        redoButton.addEventListener('click', redoAction);
+        
+        // === END LOGIC HISTORY ===
+
+        /**
+         * Thay đổi màu nền bảng đen và xóa tất cả nét vẽ hiện tại.
+         * @param {string} newColor - Mã màu hex mới cho bảng.
+         */
+        function redrawCanvasBackground(newColor) {
+            if (newColor === CHALKBOARD_COLOR) {
+                return; // Không cần làm gì
+            }
+            
+            CHALKBOARD_COLOR = newColor;
+
+            // LƯU MÀU VÀO LOCAL STORAGE (YÊU CẦU MỚI)
+            localStorage.setItem(BOARD_COLOR_KEY, newColor);
+
+            // Cập nhật nền Canvas CSS (chỉ để hiển thị cho phần không vẽ)
+            canvas.style.backgroundColor = newColor; 
+            
+            // FIX: Dùng clearRect trước khi đổ màu nền mới để đảm bảo canvas sạch tuyệt đối
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = newColor; 
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Xóa lịch sử và lưu trạng thái trống mới
+            history = [];
+            historyIndex = -1;
+            saveState();
+            
+            // Cập nhật strokeStyle nếu đang ở chế độ Tẩy
+            if (isErasing) {
+                ctx.strokeStyle = CHALKBOARD_COLOR;
+            }
+        }
+
+        // Event listener cho Bộ chọn Màu Bảng
+        boardColorPicker.addEventListener('input', (e) => {
+            redrawCanvasBackground(e.target.value);
+        });
+
+        // Hàm thay đổi kích thước canvas
+        function resizeCanvas() {
+            const rect = canvas.getBoundingClientRect();
+            
+            const imageData = historyIndex >= 0 ? history[history[historyIndex].startsWith('data') ? historyIndex : 0] : null;
+
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+
+            // Thiết lập lại context
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.lineWidth = sizeSlider.value;
+            ctx.strokeStyle = currentDrawColor;
+            ctx.fillStyle = CHALKBOARD_COLOR; 
+            
+            // Vẽ lại nền
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Đảm bảo xóa sạch
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            if (imageData) {
+                const img = new Image();
+                img.onload = () => {
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    setTimeout(saveState, 50); 
+                };
+                img.src = imageData;
+            } else {
+                saveState();
+            }
+
+            // Đồng bộ màu nền CSS
+            canvas.style.backgroundColor = CHALKBOARD_COLOR; 
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        
+        window.onload = function() {
+             // 1. Tải màu bảng từ localStorage
+            const savedColor = localStorage.getItem(BOARD_COLOR_KEY);
+            if (savedColor) {
+                CHALKBOARD_COLOR = savedColor;
+                boardColorPicker.value = savedColor; 
+            }
+            
+            // 2. Setup Canvas
+            resizeCanvas(); 
+            setDrawingMode();
+
+            // 3. Ẩn modal lúc khởi động
+            confirmationModal.classList.add('hidden-modal'); 
+            settingsScreen.classList.add('hidden-modal'); 
+            passwordModal.classList.add('hidden-modal');
+            videoModal.classList.add('hidden-modal');
+
+            // 4. Thêm logic kiểm tra khóa bảng
+            handleAppLock();
+            
+            // 5. Khởi tạo trạng thái ban đầu của Video Player
+            videoPlayerContainer.classList.add('hidden');
+        };
+
+        // Hàm bắt đầu vẽ (nhấn chuột/chạm)
+        function startDrawing(e) {
+            if (isBoardLocked) return; 
+            isDrawing = true;
+            [lastX, lastY] = getCoordinates(e);
+        }
+
+        // Hàm dừng vẽ (nhả chuột/kết thúc chạm)
+        function stopDrawing() {
+            if (!isDrawing) return; 
+            isDrawing = false;
+            ctx.filter = 'none';
+            saveState();
+        }
+
+        // Hàm vẽ (di chuyển chuột/chạm)
+        function draw(e) {
+            if (!isDrawing) return; 
+
+            e.preventDefault(); 
+
+            const [x, y] = getCoordinates(e);
+
+            ctx.lineWidth = sizeSlider.value;
+            
+            if (isErasing) {
+                ctx.strokeStyle = CHALKBOARD_COLOR;
+                ctx.globalAlpha = 1.0; 
+                ctx.filter = 'blur(0.2px)';
+            } else {
+                ctx.strokeStyle = currentDrawColor;
+                ctx.globalAlpha = 0.9 + Math.random() * 0.1; 
+                ctx.filter = 'blur(0.5px)'; 
+            }
+            
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastY);
+            ctx.lineTo(x, y);
+            ctx.stroke();
+
+            lastX = x;
+            lastY = y;
+        }
+        
+        // Hàm lấy tọa độ từ sự kiện chuột hoặc cảm ứng
+        function getCoordinates(e) {
+            let clientX, clientY;
+            
+            if (e.touches && e.touches.length > 0) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+
+            const rect = canvas.getBoundingClientRect();
+            const x = (clientX - rect.left);
+            const y = (clientY - rect.top);
+            
+            return [x, y];
+        }
+
+
+        // Gán các sự kiện vẽ
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', stopDrawing);
+        canvas.addEventListener('mouseout', stopDrawing); 
+        canvas.addEventListener('touchstart', startDrawing);
+        canvas.addEventListener('touchmove', draw);
+        canvas.addEventListener('touchend', stopDrawing);
+        canvas.addEventListener('touchcancel', stopDrawing);
+
+        // =======================================================
+        // XỬ LÝ CHUYỂN CHẾ ĐỘ VÀ NÚT CHỨC NĂNG
+        // =======================================================
+        
+        function setDrawingMode() {
+            isErasing = false;
+            
+            eraserButton.classList.remove('active');
+            chalkButton.classList.add('active');
+            
+            // Hiển thị Color Picker, ẩn Clear All
+            drawingControls.classList.add('flex');
+            drawingControls.classList.remove('hidden');
+            eraserControls.classList.remove('flex');
+            eraserControls.classList.add('hidden');
+            
+            // Cập nhật nhãn kích thước
+            sizeLabel.innerHTML = `Cỡ Nét (<span id="currentSizeValue">${sizeSlider.value}</span>)`;
+            
+            ctx.strokeStyle = currentDrawColor; 
+        }
+
+        function setErasingMode() {
+            isErasing = true;
+            
+            chalkButton.classList.remove('active');
+            eraserButton.classList.add('active');
+            
+            // Ẩn Color Picker, hiển thị Clear All
+            eraserControls.classList.add('flex');
+            eraserControls.classList.remove('hidden');
+            drawingControls.classList.remove('flex');
+            drawingControls.classList.add('hidden');
+            
+            // Cập nhật nhãn kích thước
+            sizeLabel.innerHTML = `Cỡ Tẩy (<span id="currentSizeValue">${sizeSlider.value}</span>)`;
+
+            ctx.strokeStyle = CHALKBOARD_COLOR; 
+        }
+
+        chalkButton.addEventListener('click', setDrawingMode);
+        eraserButton.addEventListener('click', setErasingMode);
+
+
+        // HÀM XÓA THỰC SỰ - Dùng khi bấm nút XÓA HẾT trong modal hoặc khi CHUYỂN VIDEO
+        function performClearAll() {
+             // FIX: Xóa canvas hoàn toàn trước khi đổ màu nền
+            ctx.clearRect(0, 0, canvas.width, canvas.height); 
+            ctx.fillStyle = CHALKBOARD_COLOR; 
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Lưu trạng thái canvas trắng (nền đen) vào lịch sử
+            history = []; // Xóa toàn bộ history
+            historyIndex = -1; 
+            saveState(); 
+
+            // Chuyển về chế độ Vẽ
+            setDrawingMode(); 
+        }
+
+        // SỰ KIỆN NÚT XÓA TẤT CẢ (CHỈ HIỆN MODAL)
+        clearAllButton.addEventListener('click', showConfirmationModal);
+        
+        // SỰ KIỆN NÚT HỦY VÀ XÁC NHẬN TRONG MODAL
+        cancelClearButton.addEventListener('click', hideConfirmationModal);
+        confirmClearButton.addEventListener('click', () => {
+             performClearAll();
+             hideConfirmationModal(); // Ẩn modal sau khi xóa
+        });
+
+
+        sizeSlider.addEventListener('input', (e) => {
+            const value = e.target.value;
+            ctx.lineWidth = value;
+            // Cập nhật giá trị hiển thị trên nhãn (dùng innerHTML để cập nhật cả span)
+            if (isErasing) {
+                sizeLabel.innerHTML = `Cỡ Tẩy (<span id="currentSizeValue">${value}</span>)`;
+            } else {
+                sizeLabel.innerHTML = `Cỡ Nét (<span id="currentSizeValue">${value}</span>)`;
+            }
+        });
+
+        colorPicker.addEventListener('input', (e) => {
+            currentDrawColor = e.target.value;
+            setDrawingMode(); 
+            ctx.strokeStyle = currentDrawColor;
+        });
+        
+        // === LOGIC NÚT LƯU ẢNH (SHARE) ===
+        function saveDrawing() {
+            // Chuyển canvas thành Data URL (PNG)
+            const dataURL = canvas.toDataURL('image/png');
+            
+            // Tạo thẻ <a> ẩn để kích hoạt download
+            const a = document.createElement('a');
+            a.href = dataURL;
+            a.download = `Blackboard-Drawing-${new Date().toISOString().slice(0, 10)}.png`;
+            
+            // Kích hoạt click để tải file
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            
+            console.log("Đã lưu hình ảnh.");
+        }
+
+        shareButton.addEventListener('click', saveDrawing);
+        
+        // === LOGIC XEM VIDEO VÀ CHUYỂN VIEW (MỚI) ===
+        
+        videoButton.addEventListener('click', showVideoModal);
+        cancelVideoButton.addEventListener('click', () => hideModal(videoModal, videoModalContent));
+        
+        confirmVideoButton.addEventListener('click', () => {
+            hideModal(videoModal, videoModalContent);
+            
+            // 1. Xóa sạch bảng trước khi chuyển (Yêu cầu của bro)
+            performClearAll(); 
+            
+            // 2. Chuyển sang View Video
+            showVideoPlayer();
+        });
+        
+        backFromVideoButton.addEventListener('click', showBlackboard);
+
+        function showVideoPlayer() {
+            // Ẩn Canvas và hiện Iframe
+            canvas.classList.add('hidden');
+            // FIX: Đảm bảo videoPlayerContainer luôn là absolute inset-0
+            videoPlayerContainer.classList.remove('hidden'); 
+
+            // Tải URL vào Iframe (Chỉ tải lần đầu hoặc khi cần reload)
+            videoIframe.src = 'https://tuanphong3108.github.io/video-player';
+            
+            // Ẩn toàn bộ controls và nút video (Nút Xem Video)
+            controlsContainer.classList.add('hidden');
+            toolbarToggleButton.classList.add('hidden');
+            videoButton.classList.add('hidden'); // Nút Xem Video bị ẩn
+            
+            // Hiện nút quay lại
+            backFromVideoButton.classList.remove('hidden');
+            
+            // Kích hoạt lại logic khóa để vô hiệu hóa tương tác
+            lockDrawingInteractions(true); 
+        }
+
+        function showBlackboard() {
+            // FIX CỦA PHONG: Disconnect hoàn toàn Iframe
+            // Setting src về about:blank ngay lập tức hủy tài nguyên của trang web đang chạy trong iframe.
+            videoIframe.src = 'about:blank'; 
+            console.log("🔥 Cleanup: Iframe đã được ngắt kết nối hoàn toàn về about:blank."); // Log cho chất chơi
+            
+            // Hiện Canvas và ẩn Iframe
+            canvas.classList.remove('hidden');
+            videoPlayerContainer.classList.add('hidden');
+
+            // Hiện lại controls và nút video
+            controlsContainer.classList.remove('hidden');
+            toolbarToggleButton.classList.remove('hidden');
+            videoButton.classList.remove('hidden');
+            
+            // Ẩn nút quay lại
+            backFromVideoButton.classList.add('hidden');
+            
+            // Kích hoạt lại logic khóa (sẽ tự động mở nếu không có mật khẩu)
+            handleAppLock(); 
+
+            // Resize canvas để fix layout nếu có vấn đề
+            resizeCanvas(); 
+        }
+        
+    </script>
+</body>
+</html>
