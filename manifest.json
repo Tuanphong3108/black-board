@@ -2,7 +2,7 @@
   "name": "Bảng Đen Chất Chơi",
   "short_name": "Blackboard",
   "description": "Ứng dụng Bảng Đen đa năng, tự động ngắt kết nối iframe và có tính năng Bảo vệ.",
-  "start_url": "/blackboard_app.html",
+  "start_url": "/black-board/index.html",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#1d3a33",
