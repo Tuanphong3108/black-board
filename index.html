@@ -115,6 +115,12 @@
             transition: opacity 0.3s ease-in-out;
         }
 
+        #md3Loading {
+    filter: brightness(0) saturate(100%)
+            invert(79%) sepia(32%) saturate(742%)
+            hue-rotate(140deg) brightness(95%) contrast(101%);
+}
+
     </style>
     <!-- Cấu hình Tailwind cho font Google Sans -->
     <script>
@@ -150,15 +156,24 @@
                 Quay lại Bảng
             </button>
             
-            <!-- Màn Hình Splash (LOADING) - Z-index 40 (dưới nút Quay lại) -->
-            <div id="videoSplash" class="absolute inset-0 bg-gray-900/90 flex flex-col items-center justify-center text-chalk-default rounded-lg z-40 transition-opacity duration-300">
-                <!-- ICON XOAY MỚI (Dùng icon cached và class animate-spin) -->
-                <span class="material-symbols-outlined text-7xl text-yellow-400 animate-spin">
-                    cached
-                </span>
-                <p class="mt-4 text-lg font-semibold text-yellow-400">Đang tải Web Video Player...</p>
-                <p class="mt-1 text-sm text-gray-400">Vui lòng chờ giây lát, bro!</p>
-            </div>
+            <!-- Màn Hình Splash (LOADING) - Z-index 40 -->
+<div id="videoSplash"
+     class="absolute inset-0 bg-gray-900/90 flex flex-col items-center justify-center text-chalk-default rounded-lg z-40 transition-opacity duration-300">
+
+    <!-- GIF MD3 Loading -->
+    <img id="md3Loading"
+         src="https://tuanphong3108.github.io/md3-loading/Loading_Indicator.gif"
+         class="w-20 h-20"
+         alt="Loading">
+
+    <p class="mt-4 text-lg font-semibold text-cyan-400">
+        Đang tải Web Video Player...
+    </p>
+    <p class="mt-1 text-sm text-gray-400">
+        Vui lòng chờ giây lát...
+    </p>
+</div>
+
 
             <!-- Iframe chứa ứng dụng ngoài -->
             <iframe id="videoIframe" src="about:blank" class="w-full h-full rounded-lg" frameborder="0" allowfullscreen></iframe>
