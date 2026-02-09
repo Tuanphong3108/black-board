@@ -115,11 +115,13 @@
             transition: opacity 0.3s ease-in-out;
         }
 
-        #md3Loading {
+#md3Loading {
+    display: block;
     filter: brightness(0) saturate(100%)
             invert(79%) sepia(32%) saturate(742%)
             hue-rotate(140deg) brightness(95%) contrast(101%);
 }
+
 
     </style>
     <!-- Cấu hình Tailwind cho font Google Sans -->
@@ -160,11 +162,11 @@
 <div id="videoSplash"
      class="absolute inset-0 bg-gray-900/90 flex flex-col items-center justify-center text-chalk-default rounded-lg z-40 transition-opacity duration-300">
 
-    <!-- GIF MD3 Loading -->
-    <img id="md3Loading"
-         src="https://tuanphong3108.github.io/md3-loading/Loading_Indicator.gif"
-         class="w-20 h-20"
-         alt="Loading">
+<img id="md3Loading"
+     src="https://tuanphong3108.github.io/md3-loading/Loading_Indicator.gif"
+     class="w-20 aspect-square object-contain"
+     alt="Loading">
+
 
     <p class="mt-4 text-lg font-semibold text-cyan-400">
         Đang tải Web Video Player...
